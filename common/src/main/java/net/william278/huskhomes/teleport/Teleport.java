@@ -97,9 +97,6 @@ public class Teleport implements Completable {
             if (localTarget.isPresent()) {
                 fireEvent((event) -> {
                     performTransactions();
-                    if (updateLastPosition && canReturnToWorld(teleporter)) {
-                        plugin.getDatabase().setLastPosition(teleporter, teleporter.getPosition());
-                    }
                     teleporter.teleportLocally(localTarget.get().getPosition(), async);
                     this.displayTeleportingComplete(teleporter);
                     teleporter.handleInvulnerability();
@@ -123,9 +120,6 @@ public class Teleport implements Completable {
 
         fireEvent((event) -> {
             performTransactions();
-            if (updateLastPosition && canReturnToWorld(teleporter)) {
-                plugin.getDatabase().setLastPosition(teleporter, teleporter.getPosition());
-            }
 
             final Position target = (Position) this.target;
             if (!plugin.getSettings().getCrossServer().isEnabled()

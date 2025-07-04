@@ -19,8 +19,10 @@
 
 package net.william278.huskhomes.event;
 
+import net.william278.huskhomes.HuskHomes;
 import net.william278.huskhomes.position.Position;
 import net.william278.huskhomes.teleport.Teleport;
+import org.bukkit.Bukkit;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.HandlerList;
 import org.jetbrains.annotations.NotNull;
@@ -31,6 +33,9 @@ public class TeleportBackEvent extends TeleportEvent implements ITeleportBackEve
 
     public TeleportBackEvent(@NotNull Teleport teleport) {
         super(teleport);
+        Bukkit.getGlobalRegionScheduler().run(Bukkit.getPluginManager().getPlugin("HuskHomes"), (task) ->
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "show-grave " + teleport.getTeleporter().getName())
+        );
     }
 
     @Override

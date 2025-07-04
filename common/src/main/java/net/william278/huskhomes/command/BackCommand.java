@@ -20,8 +20,11 @@
 package net.william278.huskhomes.command;
 
 import net.william278.huskhomes.HuskHomes;
+import net.william278.huskhomes.position.Location;
 import net.william278.huskhomes.position.Position;
+import net.william278.huskhomes.random.NormalDistributionEngine;
 import net.william278.huskhomes.teleport.Teleport;
+import net.william278.huskhomes.teleport.TeleportBuilder;
 import net.william278.huskhomes.user.OnlineUser;
 import net.william278.huskhomes.util.TransactionResolver;
 import org.jetbrains.annotations.NotNull;
@@ -29,9 +32,10 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 public class BackCommand extends InGameCommand {
-
+    private final long maxAttempts = 12;
     protected BackCommand(@NotNull HuskHomes plugin) {
         super(
                 List.of("back"),
@@ -43,22 +47,61 @@ public class BackCommand extends InGameCommand {
                 "previous", false
         ));
     }
-
     @Override
     public void execute(@NotNull OnlineUser executor, @NotNull String[] args) {
+        final Optional<OnlineUser> optionalTeleporter = args.length >= 1 ? plugin.getOnlineUser(args[0]) : executor instanceof OnlineUser ? Optional.of((OnlineUser) executor) : Optional.empty();
+        if (optionalTeleporter.isEmpty()) {
+            if (args.length == 0) {
+                plugin.getLocales().getLocale("error_invalid_syntax", getUsage())
+                    .ifPresent(executor::sendMessage);
+                return;
+            }
+            plugin.getLocales().getLocale("error_player_not_found", args[0])
+                .ifPresent(executor::sendMessage);
+            return;
+        }
+        final OnlineUser teleporter = optionalTeleporter.get();
         final Optional<Position> lastPosition = plugin.getDatabase().getLastPosition(executor);
         if (lastPosition.isEmpty()) {
             plugin.getLocales().getLocale("error_no_last_position")
                     .ifPresent(executor::sendMessage);
             return;
         }
-
-        Teleport.builder(plugin)
-                .teleporter(executor)
-                .target(lastPosition.get())
-                .actions(TransactionResolver.Action.BACK_COMMAND)
+        getRandomPosition(lastPosition.get()).thenAccept(position -> {
+            if (position.isEmpty()) {
+                plugin.getLocales().getLocale("error_rtp_randomization_timeout")
+                    .ifPresent(executor::sendMessage);
+                return;
+            }
+            // Build and execute the teleport
+            final TeleportBuilder builder = Teleport.builder(plugin)
+                .teleporter(teleporter)
                 .type(Teleport.Type.BACK)
-                .buildAndComplete(true);
+                .actions(TransactionResolver.Action.BACK_COMMAND)
+                .target(position.get());
+            builder.buildAndComplete(executor.equals(teleporter), args);
+        });
     }
-
+    private CompletableFuture<Optional<Position>> getRandomPosition(@NotNull Location center) {
+        return plugin.supplyAsync(() -> {
+            Optional<Location> location = generateSafeLocation(center).join();
+            int attempts = 0;
+            while (location.isEmpty()) {
+                location = generateSafeLocation(center).join();
+                if (attempts >= maxAttempts) {
+                    return Optional.empty();
+                }
+                attempts++;
+            }
+            return location.map(resolved -> Position.at(resolved, plugin.getServerName()));
+        });
+    }
+    /**
+     * Generate a safe ground-level {@link Location} through a randomized normally-distributed radius and random angle.
+     *
+     * @return A generated location
+     */
+    private CompletableFuture<Optional<Location>> generateSafeLocation(@NotNull Location center) {
+        return plugin.findSafeGroundLocation(NormalDistributionEngine.generateLocation(center, 0.75F, 2.0F, 200, 600));
+    }
 }
